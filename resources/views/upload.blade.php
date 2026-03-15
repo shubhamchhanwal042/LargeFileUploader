@@ -470,8 +470,11 @@ button:hover{ background:#0056b3; }
 <div class="loader" id="loader"></div>
 
 <div class="status" id="statusText"></div>
-
+<button onclick="startUpload()">Upload</button>
+    <button onclick="pauseUpload()" style="background:#ffc107;margin-left:5px;"> Pause </button>
+    <button onclick="resumeUpload()" style="background:#28a745;margin-left:5px;"> Resume </button>
 </div>
+    <div class="status" id="speedText"></div>
 <!-- <script>
 
 const chunkSize = 20 * 1024 * 1024; // 20MB chunks (faster)
@@ -609,91 +612,197 @@ alert("Upload completed!")
 </script> -->
 
 <script>
+
 const chunkSize = 5 * 1024 * 1024;
 
-async function startUpload() {
+let cancelUpload = false;
+let pause = false;
+
+let currentChunk = 0;
+let globalFile;
+let uploadId;
+let key;
+let parts = [];
+
+async function startUpload(){
 
 const file = document.getElementById("fileInput").files[0];
-if (!file) return alert("Select file");
 
+if(!file){
+alert("Please select file");
+return;
+}
 
-// 1️⃣ INIT UPLOAD
-const initRes = await fetch("/upload/init", {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content
-    },
-    body: JSON.stringify({
-        file_name: file.name
-    })
+globalFile = file;
+cancelUpload = false;
+pause = false;
+
+document.getElementById("loader").style.display="block";
+
+let session = JSON.parse(localStorage.getItem("uploadSession"));
+
+if(session && session.fileName === file.name){
+
+uploadId = session.uploadId;
+key = session.key;
+parts = session.parts || [];
+
+document.getElementById("statusText").innerText="Resuming previous upload";
+
+}else{
+
+const initRes = await fetch("/upload/init",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
+},
+body:JSON.stringify({ file_name:file.name })
 });
 
 const initData = await initRes.json();
 
-const uploadId = initData.uploadId;
-const key = initData.key;
+uploadId = initData.uploadId;
+key = initData.key;
 
+parts = [];
+
+localStorage.setItem("uploadSession",JSON.stringify({
+fileName:file.name,
+uploadId:uploadId,
+key:key,
+parts:[]
+}));
+
+}
+
+uploadChunks();
+}
+
+async function uploadChunks(){
+
+const file = globalFile;
 const totalChunks = Math.ceil(file.size / chunkSize);
 
-let parts = [];
+for(let i=currentChunk;i<totalChunks;i++){
 
-for (let i = 0; i < totalChunks; i++) {
+if(cancelUpload) return;
 
-    const start = i * chunkSize;
-    const end = Math.min(file.size, start + chunkSize);
-    const chunk = file.slice(start, end);
-
-    // 2️⃣ GET PRESIGNED URL
-    const urlRes = await fetch(`/s3-presigned-url`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content
-        },
-        body: JSON.stringify({
-            uploadId,
-            key,
-            partNumber: i + 1
-        })
-    });
-
-    const urlData = await urlRes.json();
-
-    // 3️⃣ UPLOAD DIRECTLY TO S3
-    const upload = await fetch(urlData.url, {
-        method: "PUT",
-        body: chunk
-    });
-
-    const etag = upload.headers.get("ETag");
-
-    parts.push({
-        PartNumber: i + 1,
-        ETag: etag
-    });
-
-    let percent = Math.floor(((i+1)/totalChunks)*100);
-    document.getElementById("progressBar").style.width = percent + "%";
-    document.getElementById("progressText").innerText = percent + "%";
+if(pause){
+currentChunk = i;
+return;
 }
 
-// 4️⃣ COMPLETE UPLOAD
-await fetch("/upload/complete", {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content
-    },
-    body: JSON.stringify({
-        uploadId,
-        key,
-        parts
-    })
+let startTime = Date.now();
+
+const start = i * chunkSize;
+const end = Math.min(file.size,start+chunkSize);
+
+const chunk = file.slice(start,end);
+
+/* PRESIGNED URL */
+
+const urlRes = await fetch("/s3-presigned-url",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
+},
+body:JSON.stringify({
+uploadId,
+key,
+partNumber:i+1
+})
 });
 
-alert("Upload Completed!");
+const urlData = await urlRes.json();
+
+/* UPLOAD */
+
+const upload = await fetch(urlData.url,{
+method:"PUT",
+body:chunk
+});
+
+const endTime = Date.now();
+
+let seconds = (endTime-startTime)/1000;
+let speed = (chunk.size/1024/1024)/seconds;
+
+document.getElementById("speedText").innerText =
+"Speed: "+speed.toFixed(2)+" MB/s";
+
+const etag = upload.headers.get("ETag");
+
+parts.push({
+PartNumber:i+1,
+ETag:etag
+});
+
+/* SAVE SESSION */
+
+localStorage.setItem("uploadSession",JSON.stringify({
+fileName:file.name,
+uploadId,
+key,
+parts
+}));
+
+/* PROGRESS */
+
+let percent = Math.floor(((i+1)/totalChunks)*100;
+
+document.getElementById("progressBar").style.width=percent+"%";
+document.getElementById("progressText").innerText=percent+"%";
+
+document.getElementById("statusText").innerText =
+"Uploading chunk "+(i+1)+" / "+totalChunks;
+
 }
+
+/* COMPLETE */
+
+await fetch("/upload/complete",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
+},
+body:JSON.stringify({
+uploadId,
+key,
+parts
+})
+});
+
+localStorage.removeItem("uploadSession");
+
+document.getElementById("loader").style.display="none";
+
+alert("Upload Complete");
+
+}
+
+/* PAUSE */
+
+function pauseUpload(){
+
+pause = true;
+
+document.getElementById("statusText").innerText="Upload Paused";
+
+}
+
+/* RESUME */
+
+function resumeUpload(){
+
+pause = false;
+
+document.getElementById("statusText").innerText="Resuming Upload";
+
+uploadChunks();
+
+}
+
 </script>
-</body>
-</html>
