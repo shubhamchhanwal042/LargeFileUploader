@@ -8,79 +8,66 @@
 <style>
 
 body{
-    font-family:Arial;
-    background:#f4f6f9;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
+font-family:Arial;
+background:#f4f6f9;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
 }
 
 .container{
-    background:white;
-    padding:40px;
-    width:420px;
-    border-radius:10px;
-    box-shadow:0 8px 25px rgba(0,0,0,0.1);
-    text-align:center;
+background:white;
+padding:40px;
+width:420px;
+border-radius:10px;
+box-shadow:0 8px 25px rgba(0,0,0,0.1);
+text-align:center;
 }
-
-h2{ margin-bottom:20px; }
-
-input[type=file]{ margin-bottom:20px; }
 
 button{
-    background:#007bff;
-    color:white;
-    border:none;
-    padding:10px 20px;
-    border-radius:6px;
-    cursor:pointer;
-    margin:5px;
+background:#007bff;
+color:white;
+border:none;
+padding:10px 20px;
+border-radius:6px;
+cursor:pointer;
+margin:5px;
 }
 
-button:hover{ background:#0056b3; }
-
 #progressContainer{
-    width:100%;
-    height:22px;
-    background:#e0e0e0;
-    border-radius:20px;
-    margin-top:20px;
-    overflow:hidden;
+width:100%;
+height:22px;
+background:#e0e0e0;
+border-radius:20px;
+margin-top:20px;
+overflow:hidden;
 }
 
 #progressBar{
-    height:100%;
-    width:0%;
-    background:linear-gradient(90deg,#00c6ff,#0072ff);
-    transition:width .3s ease;
-}
-
-#progressText{
-    margin-top:10px;
-    font-weight:bold;
+height:100%;
+width:0%;
+background:linear-gradient(90deg,#00c6ff,#0072ff);
 }
 
 .loader{
-    margin:20px auto;
-    border:6px solid #f3f3f3;
-    border-top:6px solid #007bff;
-    border-radius:50%;
-    width:40px;
-    height:40px;
-    animation:spin 1s linear infinite;
-    display:none;
+margin:20px auto;
+border:6px solid #f3f3f3;
+border-top:6px solid #007bff;
+border-radius:50%;
+width:40px;
+height:40px;
+animation:spin 1s linear infinite;
+display:none;
 }
 
 @keyframes spin{
-    0%{transform:rotate(0deg);}
-    100%{transform:rotate(360deg);}
+0%{transform:rotate(0deg);}
+100%{transform:rotate(360deg);}
 }
 
 .status{
-    margin-top:10px;
-    color:#555;
+margin-top:10px;
 }
 
 </style>
@@ -116,158 +103,94 @@ button:hover{ background:#0056b3; }
 <script>
 
 const chunkSize = 5 * 1024 * 1024;
+const MAX_PARALLEL_UPLOADS = 4;
 
-let cancelUpload = false;
-let pause = false;
+let pause=false;
+let cancelUpload=false;
 
-let currentChunk = 0;
 let globalFile;
 let uploadId;
 let key;
-let parts = [];
+let parts=[];
 
 async function startUpload(){
 
-const file = document.getElementById("fileInput").files[0];
+const file=document.getElementById("fileInput").files[0];
 
 if(!file){
-alert("Please select file");
+alert("Select file");
 return;
 }
 
-globalFile = file;
-cancelUpload = false;
-pause = false;
-currentChunk = 0;
-
-document.getElementById("progressBar").style.width="0%";
-document.getElementById("progressText").innerText="0%";
+globalFile=file;
 
 document.getElementById("loader").style.display="block";
 
-let session = JSON.parse(localStorage.getItem("uploadSession"));
-
-if(session && session.fileName === file.name){
-
-uploadId = session.uploadId;
-key = session.key;
-parts = session.parts || [];
-
-document.getElementById("statusText").innerText="Resuming previous upload";
-
-}else{
-
-const initRes = await fetch("/upload/init",{
+const initRes=await fetch("/upload/init",{
 method:"POST",
 headers:{
 "Content-Type":"application/json",
 "X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
 },
-body:JSON.stringify({ file_name:file.name })
+body:JSON.stringify({file_name:file.name})
 });
 
-const initData = await initRes.json();
+const initData=await initRes.json();
 
-uploadId = initData.uploadId;
-key = initData.key;
-
-parts = [];
-
-localStorage.setItem("uploadSession",JSON.stringify({
-fileName:file.name,
-uploadId:uploadId,
-key:key,
-parts:[]
-}));
-
-}
+uploadId=initData.uploadId;
+key=initData.key;
 
 uploadChunks();
 }
 
 async function uploadChunks(){
 
-const file = globalFile;
-const totalChunks = Math.ceil(file.size / chunkSize);
+const file=globalFile;
+const totalChunks=Math.ceil(file.size/chunkSize);
 
-for(let i=currentChunk;i<totalChunks;i++){
+let activeUploads=[];
+let uploadedCount=0;
 
-if(cancelUpload) return;
+for(let i=0;i<totalChunks;i++){
 
-if(pause){
-currentChunk = i;
-return;
-}
+if(pause)return;
 
-let startTime = Date.now();
+const start=i*chunkSize;
+const end=Math.min(file.size,start+chunkSize);
 
-const start = i * chunkSize;
-const end = Math.min(file.size,start+chunkSize);
+const chunk=file.slice(start,end);
 
-const chunk = file.slice(start,end);
+const uploadPromise=uploadSingleChunk(chunk,i,totalChunks)
+.then(()=>{
 
-/* GET PRESIGNED URL */
+uploadedCount++;
 
-const urlRes = await fetch("/s3-presigned-url",{
-method:"POST",
-headers:{
-"Content-Type":"application/json",
-"X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
-},
-body:JSON.stringify({
-uploadId,
-key,
-partNumber:i+1
-})
+let percent=Math.floor((uploadedCount/totalChunks)*100);
+
+document.getElementById("progressBar").style.width=percent+"%";
+document.getElementById("progressText").innerText=percent+"%";
+
 });
 
-const urlData = await urlRes.json();
+activeUploads.push(uploadPromise);
 
-/* UPLOAD CHUNK */
+if(activeUploads.length>=MAX_PARALLEL_UPLOADS){
 
-const upload = await fetch(urlData.url,{
-method:"PUT",
-body:chunk
-});
+await Promise.race(activeUploads);
 
-const endTime = Date.now();
-
-let seconds = (endTime-startTime)/1000;
-let speed = (chunk.size/1024/1024)/seconds;
-
-document.getElementById("speedText").innerText =
-"Speed: "+speed.toFixed(2)+" MB/s";
-
-const etag = upload.headers.get("ETag");
-
-parts.push({
-PartNumber:i+1,
-ETag:etag
-});
-
-/* SAVE SESSION */
-
-localStorage.setItem("uploadSession",JSON.stringify({
-fileName:file.name,
-uploadId,
-key,
-parts
-}));
-
-/* UPDATE PROGRESS */
-
-
-let percent = Math.floor(((i+1)/totalChunks)*100);
-
-document.getElementById("progressBar").style.width = percent + "%";
-document.getElementById("progressText").innerText = percent + "%";
-
-document.getElementById("statusText").innerText =
-"Uploading chunk "+(i+1)+" / "+totalChunks;
+activeUploads=activeUploads.filter(p=>!p.resolved);
 
 }
 
-/* COMPLETE UPLOAD */
+}
+
+await Promise.all(activeUploads);
+
+/* IMPORTANT FIX */
+
+parts.sort((a,b)=>a.PartNumber-b.PartNumber);
+
+/* COMPLETE MULTIPART */
 
 await fetch("/upload/complete",{
 method:"POST",
@@ -282,34 +205,71 @@ parts
 })
 });
 
-localStorage.removeItem("uploadSession");
-
 document.getElementById("loader").style.display="none";
-
 document.getElementById("statusText").innerText="Upload Completed";
 
 alert("Upload Complete");
 
 }
 
-/* PAUSE */
+async function uploadSingleChunk(chunk,i,totalChunks){
+
+let startTime=Date.now();
+
+/* PRESIGNED URL */
+
+const urlRes=await fetch("/s3-presigned-url",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
+},
+body:JSON.stringify({
+uploadId,
+key,
+partNumber:i+1
+})
+});
+
+const urlData=await urlRes.json();
+
+/* UPLOAD */
+
+const upload=await fetch(urlData.url,{
+method:"PUT",
+body:chunk
+});
+
+let endTime=Date.now();
+
+let seconds=(endTime-startTime)/1000;
+let speed=(chunk.size/1024/1024)/seconds;
+
+document.getElementById("speedText").innerText=
+"Speed: "+speed.toFixed(2)+" MB/s";
+
+const etag=upload.headers.get("ETag");
+
+parts.push({
+PartNumber:i+1,
+ETag:etag
+});
+
+document.getElementById("statusText").innerText=
+"Uploading chunk "+(i+1)+" / "+totalChunks;
+
+}
 
 function pauseUpload(){
 
-pause = true;
-
+pause=true;
 document.getElementById("statusText").innerText="Upload Paused";
 
 }
 
-/* RESUME */
-
 function resumeUpload(){
 
-pause = false;
-
-document.getElementById("statusText").innerText="Resuming Upload";
-
+pause=false;
 uploadChunks();
 
 }
