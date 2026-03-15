@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -38,6 +36,7 @@ button{
     padding:10px 20px;
     border-radius:6px;
     cursor:pointer;
+    margin:5px;
 }
 
 button:hover{ background:#0056b3; }
@@ -98,6 +97,8 @@ button:hover{ background:#0056b3; }
 <br>
 
 <button onclick="startUpload()">Upload</button>
+<button onclick="pauseUpload()" style="background:#ffc107;">Pause</button>
+<button onclick="resumeUpload()" style="background:#28a745;">Resume</button>
 
 <div id="progressContainer">
 <div id="progressBar"></div>
@@ -108,11 +109,9 @@ button:hover{ background:#0056b3; }
 <div class="loader" id="loader"></div>
 
 <div class="status" id="statusText"></div>
-<button onclick="startUpload()">Upload</button>
-    <button onclick="pauseUpload()" style="background:#ffc107;margin-left:5px;"> Pause </button>
-    <button onclick="resumeUpload()" style="background:#28a745;margin-left:5px;"> Resume </button>
+<div class="status" id="speedText"></div>
+
 </div>
-    <div class="status" id="speedText"></div>
 
 <script>
 
@@ -139,6 +138,10 @@ return;
 globalFile = file;
 cancelUpload = false;
 pause = false;
+currentChunk = 0;
+
+document.getElementById("progressBar").style.width="0%";
+document.getElementById("progressText").innerText="0%";
 
 document.getElementById("loader").style.display="block";
 
@@ -203,7 +206,7 @@ const end = Math.min(file.size,start+chunkSize);
 
 const chunk = file.slice(start,end);
 
-/* PRESIGNED URL */
+/* GET PRESIGNED URL */
 
 const urlRes = await fetch("/s3-presigned-url",{
 method:"POST",
@@ -220,7 +223,7 @@ partNumber:i+1
 
 const urlData = await urlRes.json();
 
-/* UPLOAD */
+/* UPLOAD CHUNK */
 
 const upload = await fetch(urlData.url,{
 method:"PUT",
@@ -251,7 +254,7 @@ key,
 parts
 }));
 
-/* PROGRESS */
+/* UPDATE PROGRESS */
 
 let percent = Math.floor(((i+1)/totalChunks)*100;
 
@@ -263,7 +266,7 @@ document.getElementById("statusText").innerText =
 
 }
 
-/* COMPLETE */
+/* COMPLETE UPLOAD */
 
 await fetch("/upload/complete",{
 method:"POST",
@@ -281,6 +284,8 @@ parts
 localStorage.removeItem("uploadSession");
 
 document.getElementById("loader").style.display="none";
+
+document.getElementById("statusText").innerText="Upload Completed";
 
 alert("Upload Complete");
 
@@ -309,3 +314,6 @@ uploadChunks();
 }
 
 </script>
+
+</body>
+</html>
