@@ -256,10 +256,11 @@ parts
 
 /* UPDATE PROGRESS */
 
-let percent = Math.floor(((i+1)/totalChunks)*100;
 
-document.getElementById("progressBar").style.width=percent+"%";
-document.getElementById("progressText").innerText=percent+"%";
+let percent = Math.floor(((i+1)/totalChunks)*100);
+
+document.getElementById("progressBar").style.width = percent + "%";
+document.getElementById("progressText").innerText = percent + "%";
 
 document.getElementById("statusText").innerText =
 "Uploading chunk "+(i+1)+" / "+totalChunks;
