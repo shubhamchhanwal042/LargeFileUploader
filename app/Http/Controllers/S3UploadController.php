@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Aws\S3\S3Client;
 use Illuminate\Support\Str;
+use App\Models\Video;
 
 class S3UploadController extends Controller
 {
