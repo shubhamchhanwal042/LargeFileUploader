@@ -10,7 +10,7 @@ Route::get('/upload', [VideoUploadController::class, 'index']);
 Route::post('/upload', [VideoUploadController::class, 'upload']);
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect('/upload');
 });
 Route::get('/test-s3', function () {
     Storage::disk('s3')->put('test.txt', 'Hello S3');
