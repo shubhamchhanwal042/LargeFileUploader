@@ -481,6 +481,78 @@ document.getElementById("statusText").innerText =
 "Uploading chunk "+parts.length+" of "+totalChunks;
 
 }
+
+/* COMPLETE MULTIPART */
+
+document.getElementById("statusText").innerText = "Finalizing upload...";
+
+await fetch("/upload/complete",{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"X-CSRF-TOKEN":document.querySelector('meta[name="csrf-token"]').content
+},
+body:JSON.stringify({
+uploadId,
+key,
+parts
+})
+});
+
+/* CLEAR SESSION */
+
+localStorage.removeItem("uploadSession");
+
+document.getElementById("loader").style.display="none";
+document.getElementById("statusText").innerText="Upload completed successfully";
+
+alert("Upload Completed!");
+
+}
+
+/* RETRY SYSTEM */
+
+async function uploadChunkWithRetry(url,chunk,retries=3){
+
+for(let attempt=1;attempt<=retries;attempt++){
+
+try{
+
+const response = await fetch(url,{
+method:"PUT",
+body:chunk
+});
+
+if(response.ok){
+return response;
+}
+
+}catch(error){
+
+console.log("Retry attempt:",attempt);
+
+}
+
+await new Promise(resolve=>setTimeout(resolve,2000));
+
+}
+
+throw new Error("Chunk upload failed");
+
+}
+
+/* CANCEL UPLOAD */
+
+function cancelCurrentUpload(){
+
+cancelUpload = true;
+
+document.getElementById("loader").style.display="none";
+
+document.getElementById("statusText").innerText="Upload cancelled by user";
+
+}
+
 </script>
 </body>
 </html>
