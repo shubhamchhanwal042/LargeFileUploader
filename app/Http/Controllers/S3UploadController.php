@@ -72,6 +72,18 @@ public function completeUpload(Request $request)
         ]
     ]);
 
+        // Save to database
+        $video = Video::create([
+            'file_name' => basename($request->key),
+            'file_path' => $request->key,
+            'status' => 'processing'
+        ]);
+    
+        // Dispatch background job
+        ProcessVideoUpload::dispatch($video);
+    
+
+
     return response()->json([
         "success" => true,
         "location" => $result['Location']
