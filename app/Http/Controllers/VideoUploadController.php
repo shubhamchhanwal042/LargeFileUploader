@@ -275,7 +275,7 @@ class VideoUploadController extends Controller
                 Log::info("Database record created", [
                     'video_id' => $video->id
                 ]);
-    
+                
                 ProcessVideoUpload::dispatch($video);
     
                 Log::info("Queue job dispatched");

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Aws\S3\S3Client;
 use Illuminate\Support\Str;
+use App\Jobs\ProcessVideoUpload;
+use App\Models\Video;
 
 class S3UploadController extends Controller
 {
@@ -71,6 +73,18 @@ public function completeUpload(Request $request)
             'Parts' => $request->parts
         ]
     ]);
+
+        // Save to database
+        $video = Video::create([
+            'file_name' => basename($request->key),
+            'file_path' => $request->key,
+            'status' => 'processing'
+        ]);
+    
+        // Dispatch background job
+        ProcessVideoUpload::dispatch($video);
+    
+
 
     return response()->json([
         "success" => true,
