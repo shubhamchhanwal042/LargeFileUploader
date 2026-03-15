@@ -64,7 +64,7 @@ class ProcessVideoUpload implements ShouldQueue
             // Simulate processing
             sleep(5);
 
-            $this->video->status = 'processed';
+            $this->video->status = 'completed';
             $this->video->save();
 
             // Send email
