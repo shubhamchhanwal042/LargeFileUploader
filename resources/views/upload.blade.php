@@ -552,7 +552,7 @@ document.getElementById("loader").style.display="none";
 document.getElementById("statusText").innerText="Upload cancelled by user";
 
 }
-
 </script>
 </body>
 </html>
+
