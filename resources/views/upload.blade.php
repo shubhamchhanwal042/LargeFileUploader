@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Video Upload</title>
+<title>Task</title>
 
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
@@ -64,14 +64,15 @@ display:none;
 
 <h2>Upload Video</h2>
 
-<input type="file" id="fileInput"><br><br>
-
+<input type="file" id="fileInput" accept="video/mp4"><br><br>
 <button onclick="startUpload()">Upload</button>
 <button onclick="pauseUpload()">Pause</button>
 <button onclick="resumeUpload()">Resume</button>
 <button onclick="cancelCurrentUpload()">Cancel</button>
-
-<div id="progressContainer">
+<p style="color:red;">
+Please wait. Upload will start shortly. Large files may take a few minutes.
+</p>
+    <div id="progressContainer">
 <div id="progressBar"></div>
 </div>
 
